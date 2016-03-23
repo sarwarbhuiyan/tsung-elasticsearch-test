@@ -1,0 +1,80 @@
+<?xml version= "1.0" encoding= "utf-8"?>
+<!DOCTYPE tsung SYSTEM "/usr/local/share/tsung/tsung-1.0.dtd" []>
+<tsung loglevel= "warning" dumptraffic="protocol">
+
+  <clients>
+    <client host= "localhost" use_controller_vm="true"  maxusers= "60000"/>
+  </clients>
+
+  <servers>
+    <server host= "localhost" port= "3000" type= "tcp"/>
+  </servers>
+
+  <load>
+    <!-- Several arrival phases of "users" -->
+    <arrivalphase phase= "1" duration= "1" unit= "minute">
+       <!-- 1 user per second for a minute -->
+       <users arrivalrate= "1" unit= "second"/>
+    </arrivalphase>
+    <arrivalphase phase= "2" duration= "1" unit= "minute">
+      <!-- 2 users per second for a minute -->
+      <users arrivalrate= "2" unit= "second"/>
+    </arrivalphase>
+    <arrivalphase phase= "3" duration= "1" unit= "minute">
+      <!-- 3 users per second for a minute -->
+      <users arrivalrate= "3" unit= "second"/>
+    </arrivalphase>
+ </load>
+
+  <!-- start of user sessions or activity -->
+  <sessions>
+    <session name= "es_load" weight= "1" type= "ts_http">
+      <!-- doing a for loop, e.g. 100000 times -->
+      <for from="1" to="1000000" incr="1" var="counter">
+
+     <!-- setting up some data to be used in our HTTP API -->
+
+     <!-- Trying to generate timestamp in ISO8601 format. This particular one uses an anonymous erlang function but can be extracted out to an erlang file and compiled -->
+     <setdynvars sourcetype="eval" code="fun({Pid,DynVars})->
+ 					 {{Year,Month,Day},{Hour,Min,Sec}}=erlang:localtime(),
+                                         T=io_lib:format(&quot;~4.10.0B-~2.10.0B-~2.10.0BT~2.10.0B:~2.10.0B:~2.10.0BZ&quot;,[Year, Month, Day, Hour, Min, Sec]),
+                                         T    
+                                     end.">
+       <var name="timestamp" />
+     </setdynvars>
+ 
+      <!-- generating a random string of 255 characters -->
+      <setdynvars sourcetype="random_string" length="255">
+       <var name="request" />
+      </setdynvars>
+
+      <!-- randomly generating a response code from a fixed list using an anonymous erlang function -->
+      <setdynvars sourcetype="eval" code="fun({Pid,DynVars})->
+						   R = case random:uniform(3) of
+                                                      1 -> 200;
+                                                      2 -> 404;
+                                                      3 -> 500
+                                                   end,
+						   R end.">
+        <var name="response" />
+      </setdynvars> 
+
+      <!-- generating a random integer from 3 to 60000 -->
+      <setdynvars sourcetype="random_number" start="3" end="60000">
+        <var name="bytes" />
+      </setdynvars> 
+
+      <!-- starting a request by the user -->
+      <request subst="true">
+        <!-- one HTTP POST request with the row.json file as a payload. The dynamic variables are going to be substituted and placeholders
+             for those are put in the JSON file -->
+        <http url="/logstash/log"
+              method="POST"
+              content_type='application/json' 
+              contents_from_file='row.json'>
+        </http>
+      </request>
+      </for>
+    </session>
+  </sessions>
+</tsung>
